@@ -11,7 +11,7 @@
     .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1rem 1.25rem;margin:1rem 0;box-shadow:0 10px 25px rgba(0,0,0,.25)}
     label{display:block;margin:.5rem 0 .25rem;color:#cbd5e1}
     input[type=file], textarea, button{width:100%}
-    textarea{min-height:220px;background:#0b1220;border:1px solid #1f2937;border-radius:12px;color:#e2e8f0;padding:.75rem}
+    textarea{min-height:240px;background:#0b1220;border:1px solid #1f2937;border-radius:12px;color:#e2e8f0;padding:.75rem}
     input[type=file]{background:#0b1220;border:1px dashed #334155;border-radius:12px;color:#94a3b8;padding:.75rem}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
     .btn{background:#2563eb;border:none;border-radius:12px;padding:.9rem 1rem;color:#fff;font-weight:700;cursor:pointer;margin-top:.75rem}
@@ -23,7 +23,7 @@
     .hint{font-size:.9rem;color:#a1a1aa}
     .ok{color:#86efac}
     .warn{color:#fca5a5}
-    .small{font-size:.85rem;color:#94a3ب8}
+    .small{font-size:.85rem;color:#94a3b8}
   </style>
 </head>
 <body>
@@ -120,7 +120,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const hasNoResp = (resp) => {
     if (!resp) return true;
     const t = normalizeArabic(resp);
-    const pats = ["لا يوجد","لا توجد","لايوجد","لاوجود","بدون","ما في"].map(p => normalizeArabic(p));
+    const pats = ["لا يوجد","لا توجد","لايوجد","لاوجود","بدون","ما في","مافي"].map(p => normalizeArabic(p));
     return pats.some(p => t.includes(p));
   };
 
@@ -131,33 +131,43 @@ document.addEventListener("DOMContentLoaded", () => {
     return "سيء";
   };
 
+  // تحويل رقم 0-10 إلى وسم تقييم عند الحاجة
+  const scoreToLabel = (n) => {
+    n = Number(n);
+    if (!isFinite(n)) return "";
+    if (n <= 2) return "سيء";
+    if (n <= 6) return "جيد جدا";
+    if (n <= 8) return "ممتاز";
+    return "ممتاز جدا";
+  };
+
   // ===== التعرف على الأسطر =====
   const isIdLine = (line) => /(الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|id)/i.test(normalizeArabic(line));
   const parseIdFromLine = (line) => { const m = String(line).match(/-?\d+/); return m ? m[0] : ""; };
 
-  // الرتبة أو الرتبة الادارية (ونحتفظ بالنص كما هو بعد النقطتين الأخيرة)
   const isRankLine = (line) => {
     const n = normalizeArabic(line);
-    return /(?:^|[\s:])(?:ال)?رتبه(?:\s+)?(?:(?:ال)?اداريه)?\s*:/.test(n) || /(?:^|[\s:])(?:ال)?رتبه\s*:/.test(n);
+    return /(?:^|[\s:])(?:ال)?رتبه(?:\س+)?(?:(?:ال)?اداريه)?\s*:/.test(n)
+        || /(?:^|[\s:])(?:ال)?رتبه\s*:/.test(n);
   };
 
-  // نستخدم خطوتين لاستخراج "التقييم":
-  // 1) "التقييم :" الصريح (الأولوية)
-  // 2) إن لم يُوجد، ن fallback إلى "تفاعل القسم :"
+  // "التقييم :" (أولوية قصوى)
   const isEvalStrictLine = (line) => {
     const n = normalizeArabic(line);
     return /(التقييم|تقييم|تقيم)\s*:/.test(n) && !/(مسؤول|مسئول|مسوول)/.test(n);
   };
+  // "تفاعل القسم :" (Fallback إن غاب "التقييم :")
   const isInteractionLine = (line) => /تفاعل القسم\s*:/.test(normalizeArabic(line));
 
-  // تقييم المسؤوليات (صيغ متعددة)، كما ندعم "المسؤوليات : لايوجد" كعدم مسؤوليات
+  // تقييم المسؤوليات
   const isRespEvalLine = (line) => {
     const n = normalizeArabic(line);
     return /(التقييم|تقييم|تقيم)/.test(n) && /(مسؤول|مسئول|مسوول)/.test(n) && /:/.test(n);
   };
+  // "المسؤوليات لايوجد" مع/بدون نقطتين
   const isRespNoneLine = (line) => {
     const n = normalizeArabic(line);
-    return /^المسؤوليات\s*:/.test(n) && /لايوجد|لا يوجد|بدون|مافي/.test(n);
+    return /^المسؤوليات(?:\s*:)?\s*(لايوجد|لا يوجد|بدون|مافي)\s*$/.test(n);
   };
 
   // قيمة بعد آخر نقطتين
@@ -193,14 +203,19 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== استخراج الحقول =====
   const parseBlock = (block, warnings) => {
     const lines = block.split(/\n/);
-    let id="", rank="", evalStrict="", evalFromInteraction="", respLabel="", respNone=false;
+    let id="", rank="", evalStrict="", evalFromInteractionRaw="", respLabel="", respNone=false;
 
     for (const ln of lines){
       try{
         if (!id && isIdLine(ln)) { id = parseIdFromLine(ln) || getValueAfterLastColon(ln); continue; }
-        if (!rank && isRankLine(ln)) { rank = getValueAfterLastColon(ln); continue; }
+        if (!rank && isRankLine(ln)) {
+          const rawRank = getValueAfterLastColon(ln);
+          // تنظيف الرتبة من النقطتين المكررة مثل ":Operator" -> "Operator"
+          rank = stripSpaces(rawRank.replace(/^[:：]+\s*/, ""));
+          continue;
+        }
         if (!evalStrict && isEvalStrictLine(ln)) { evalStrict = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
-        if (!evalFromInteraction && isInteractionLine(ln)) { evalFromInteraction = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
+        if (!evalFromInteractionRaw && isInteractionLine(ln)) { evalFromInteractionRaw = stripSpaces(getValueAfterLastColon(ln)); continue; }
         if (!respLabel && isRespEvalLine(ln)) { respLabel = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
         if (!respNone && isRespNoneLine(ln)) { respNone = true; continue; }
       }catch(e){ /* تجاهل */ }
@@ -216,17 +231,32 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // اختيار التقييم النهائي المصدر: نفضّل "التقييم :" على "تفاعل القسم :"
-    const evalLabel = evalStrict || evalFromInteraction || "";
+    // Fallback شامل للعثور على "التقييم :" إذا لم يُلتقط كسطر
+    if (!evalStrict) {
+      const mEval = block.match(/^\s*(?:التقييم|تقييم|تقيم)\s*[:：]\s*([^\n\r]+)/mi);
+      if (mEval) evalStrict = normalizeLabelSmart(mEval[1]);
+    }
 
-    // إن كان هناك سطر "المسؤوليات : لايوجد" نعتبرها لا مسؤوليات حتى لو لم يُذكر "تقييم المسؤوليات"
+    // تحويل "تفاعل القسم : [n]" إلى وسم تقييم عند غياب "التقييم :"
+    let evalFromInteraction = "";
+    if (!evalStrict && evalFromInteractionRaw) {
+      const num = (evalFromInteractionRaw.match(/\d+/)||[])[0];
+      if (num !== undefined) {
+        evalFromInteraction = scoreToLabel(num);
+      } else {
+        // لو لم نجد رقمًا، نحاول تطبيع النص (قد يكون "جيد جدا" مكتوبًا حرفيًا)
+        evalFromInteraction = normalizeLabelSmart(evalFromInteractionRaw);
+      }
+    }
+
+    // إن كان هناك "المسؤوليات : لايوجد" نعتبرها لا مسؤوليات
     let respFinal = respLabel;
     if (respNone && !respFinal) respFinal = "لا يوجد";
 
     return {
       id: stripSpaces(id),
       rank: stripSpaces(rank),
-      evalLabel: normalizeLabelSmart(evalLabel),
+      evalLabel: normalizeLabelSmart(evalStrict || evalFromInteraction || ""),
       respLabel: normalizeLabelSmart(respFinal)
     };
   };
