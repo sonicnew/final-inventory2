@@ -11,19 +11,19 @@
     .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1rem 1.25rem;margin:1rem 0;box-shadow:0 10px 25px rgba(0,0,0,.25)}
     label{display:block;margin:.5rem 0 .25rem;color:#cbd5e1}
     input[type=file], textarea, button{width:100%}
-    textarea{min-height:200px;background:#0b1220;border:1px solid #1f2937;border-radius:12px;color:#e2e8f0;padding:.75rem}
+    textarea{min-height:220px;background:#0b1220;border:1px solid #1f2937;border-radius:12px;color:#e2e8f0;padding:.75rem}
     input[type=file]{background:#0b1220;border:1px dashed #334155;border-radius:12px;color:#94a3b8;padding:.75rem}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
     .btn{background:#2563eb;border:none;border-radius:12px;padding:.9rem 1rem;color:#fff;font-weight:700;cursor:pointer;margin-top:.75rem}
     .btn:disabled{opacity:.6;cursor:not-allowed}
     .muted{color:#94a3b8;font-size:.9rem}
-    .out{white-space:pre-wrap;background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:.75rem;min-height:140px}
+    .out{white-space:pre-wrap;background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:.75rem;min-height:160px}
     .links a{display:inline-block;margin:.5rem .5rem .5rem 0;color:#93c5fd;text-decoration:none;border:1px solid #334155;border-radius:999px;padding:.4rem .75rem}
     .links a:hover{background:#1e293b}
     .hint{font-size:.9rem;color:#a1a1aa}
     .ok{color:#86efac}
     .warn{color:#fca5a5}
-    .small{font-size:.85rem;color:#94a3b8}
+    .small{font-size:.85rem;color:#94a3ب8}
   </style>
 </head>
 <body>
@@ -68,12 +68,11 @@
 document.addEventListener("DOMContentLoaded", () => {
   "use strict";
 
-  // ===== تنظيف محارف التحكم/الاتجاه الخفية + التشكيل =====
-  const CONTROL_RE = /[\u200C-\u200F\u202A-\u202E\u2066-\u2069]/g; // ZWNJ/ZWS, LRM/RLM, LRE/RLE/PDF, LRI/RLI/FSI/PDI
-  const TASHKEEL_RE = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g; // تشكيل عربية
+  // ===== تنظيف محارف التحكم/الاتجاه + التشكيل =====
+  const CONTROL_RE = /[\u200C-\u200F\u202A-\u202E\u2066-\u2069]/g;
+  const TASHKEEL_RE = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
   const cleanControls = (s) => (s||"").replace(CONTROL_RE, "");
 
-  // ===== تطبيع عربي عام =====
   const normalizeArabic = (s) => cleanControls(s)
     .replace(TASHKEEL_RE, "")
     .replace(/[إأآٱ]/g,"ا")
@@ -81,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
     .replace(/ى/g,"ي")
     .replace(/ؤ/g,"و")
     .replace(/ئ/g,"ي")
-    .replace(/ء/g,"")   // إزالة الهمزة لتقريب "سيء" -> "سي"
+    .replace(/ء/g,"")
     .replace(/ـ/g,"")
     .replace(/\s+/g," ")
     .trim()
@@ -95,49 +94,27 @@ document.addEventListener("DOMContentLoaded", () => {
   const INTERACTION_POINTS = {"سيء":0,"جيد جدا":3,"ممتاز":4,"ممتاز جدا":6};
   const RESP_POINTS = {"سيء":0,"جيد جدا":1,"ممتاز":2,"ممتاز جدا":4};
 
-  // ===== تطبيع/تصنيف ذكي للتقييمات =====
+  // ===== تطبيع ذكي للتقييمات =====
   const normalizeLabelSmart = (raw) => {
     if (!raw) return "";
     const original = stripSpaces(raw);
     const base = normalizeArabic(original);
-    const compact = base.replace(/\s+/g,""); // بدون مسافات
-
-    // خرائط مطابقة تامة
+    const compact = base.replace(/\s+/g,"");
     const exactMap = {
       "سيء":"سيء","سيئ":"سيء","سئ":"سيء","سي":"سيء",
-      "جيدجدا":"جيد جدا","جيد جدا":"جيد جدا","جيدجدأ":"جيد جدا","جيدجدآ":"جيد جدا",
+      "جيدجدا":"جيد جدا","جيد جدا":"جيد جدا","جيدجدأ":"جيد جدا","جيدجدآ":"جيد جدا","جيدجدًا":"جيد جدا","جيد جدًا":"جيد جدا",
       "ممتاز":"ممتاز",
-      "ممتازجدا":"ممتاز جدا","ممتاز جدا":"ممتاز جدا","ممتازجدأ":"ممتاز جدا","ممتازجدآ":"ممتاز جدا",
+      "ممتازجدا":"ممتاز جدا","ممتاز جدا":"ممتاز جدا","ممتازجدأ":"ممتاز جدا","ممتازجدآ":"ممتاز جدا","ممتازجدًا":"ممتاز جدا","ممتاز جدًا":"ممتاز جدا",
       "جديد":"جديد","جديده":"جديد","new":"جديد"
     };
     if (exactMap[compact]) return exactMap[compact];
-
-    // قواعد تقريبية:
-    // 1) ممتاز جدا: وجود "ممتاز" + "جد" أو "جدا"
-    if (compact.startsWith("ممتاز") && (compact.includes("جدا") || compact.includes("جد"))) {
-      return "ممتاز جدا";
-    }
-    // 2) جيد جدا: وجود "جيد" + "جد" أو "جدا"
-    if (compact.startsWith("جيد") && (compact.includes("جدا") || compact.includes("جد"))) {
-      return "جيد جدا";
-    }
-    // 3) سيء: يبدأ بـ "سي" بعد التطبيع (لأن "سيء" تصبح "سي" بعد إزالة الهمزة)
-    if (compact === "سي" || compact.startsWith("سي")) {
-      return "سيء";
-    }
-    // 4) ممتاز: يبدأ بـ "ممتاز" بدون "جدا"
-    if (compact.startsWith("ممتاز")) {
-      return "ممتاز";
-    }
-    // 5) جديد
-    if (compact.startsWith("جديد") || compact === "new") {
-      return "جديد";
-    }
-
-    // إن لم نعرفها نُعيد الأصل كما هو (ليتم تحذير المستخدم لاحقًا إذا لزم)
-    return original;
+    if (compact.startsWith("ممتاز") && (compact.includes("جدا") || compact.includes("جد"))) return "ممتاز جدا";
+    if (compact.startsWith("جيد") && (compact.includes("جدا") || compact.includes("جد"))) return "جيد جدا";
+    if (compact === "سي" || compact.startsWith("سي")) return "سيء";
+    if (compact.startsWith("ممتاز")) return "ممتاز";
+    if (compact.startsWith("جديد") || compact === "new") return "جديد";
+    return original; // يُترك للتحذير إن لزم
   };
-
   const isNew = (label) => NEW_SET.has(normalizeArabic(label));
 
   const hasNoResp = (resp) => {
@@ -155,33 +132,39 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ===== التعرف على الأسطر =====
-  const isIdLine = (line) => {
-    const n = normalizeArabic(line);
-    return /(الايدي|الايدى|ايدي|اي دي|الاي دي|id)/.test(n);
-  };
-  const parseIdFromLine = (line) => {
-    const m = String(line).match(/-?\d+/);
-    return m ? m[0] : "";
-  };
+  const isIdLine = (line) => /(الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|id)/i.test(normalizeArabic(line));
+  const parseIdFromLine = (line) => { const m = String(line).match(/-?\d+/); return m ? m[0] : ""; };
 
+  // الرتبة أو الرتبة الادارية (ونحتفظ بالنص كما هو بعد النقطتين الأخيرة)
   const isRankLine = (line) => {
     const n = normalizeArabic(line);
-    return /(?:^|[\s:])(?:ال)?رتبه(?:\s+)?(?:(?:ال)?اداريه)?\s*:/.test(n)
-        || /(?:^|[\س:])(?:ال)?رتبه\s*:/.test(n);
+    return /(?:^|[\s:])(?:ال)?رتبه(?:\s+)?(?:(?:ال)?اداريه)?\s*:/.test(n) || /(?:^|[\s:])(?:ال)?رتبه\s*:/.test(n);
   };
 
-  const isEvalLine = (line) => {
+  // نستخدم خطوتين لاستخراج "التقييم":
+  // 1) "التقييم :" الصريح (الأولوية)
+  // 2) إن لم يُوجد، ن fallback إلى "تفاعل القسم :"
+  const isEvalStrictLine = (line) => {
     const n = normalizeArabic(line);
-    return /(التقييم|تقييم|تقيم|تفاعل القسم)/.test(n) && !/(مسؤول|مسئول|مسوول)/.test(n);
+    return /(التقييم|تقييم|تقيم)\s*:/.test(n) && !/(مسؤول|مسئول|مسوول)/.test(n);
   };
+  const isInteractionLine = (line) => /تفاعل القسم\s*:/.test(normalizeArabic(line));
 
+  // تقييم المسؤوليات (صيغ متعددة)، كما ندعم "المسؤوليات : لايوجد" كعدم مسؤوليات
   const isRespEvalLine = (line) => {
     const n = normalizeArabic(line);
-    return /(التقييم|تقييم|تقيم)/.test(n) && /(مسؤول|مسئول|مسوول|مسؤوليات|مسئوليات|مسووليات)/.test(n);
+    return /(التقييم|تقييم|تقيم)/.test(n) && /(مسؤول|مسئول|مسوول)/.test(n) && /:/.test(n);
+  };
+  const isRespNoneLine = (line) => {
+    const n = normalizeArabic(line);
+    return /^المسؤوليات\s*:/.test(n) && /لايوجد|لا يوجد|بدون|مافي/.test(n);
   };
 
-  const getValueAfterColon = (line) => {
-    const idx = Math.max(line.indexOf(":"), line.indexOf("："));
+  // قيمة بعد آخر نقطتين
+  const getValueAfterLastColon = (line) => {
+    const i1 = line.lastIndexOf("：");
+    const i2 = line.lastIndexOf(":");
+    const idx = Math.max(i1, i2);
     if (idx >= 0) return stripSpaces(line.slice(idx+1));
     const m = line.match(/[—\-]\s*(.+)$/);
     return m ? stripSpaces(m[1]) : "";
@@ -210,42 +193,42 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== استخراج الحقول =====
   const parseBlock = (block, warnings) => {
     const lines = block.split(/\n/);
-    let id="", rank="", evalLabel="", respLabel="";
+    let id="", rank="", evalStrict="", evalFromInteraction="", respLabel="", respNone=false;
+
     for (const ln of lines){
       try{
-        if (!id && isIdLine(ln)) {
-          id = parseIdFromLine(ln) || getValueAfterColon(ln);
-          continue;
-        }
-        if (!rank && isRankLine(ln)) {
-          rank = getValueAfterColon(ln);
-          continue;
-        }
-        if (!evalLabel && isEvalLine(ln)) {
-          evalLabel = normalizeLabelSmart(getValueAfterColon(ln));
-          continue;
-        }
-        if (!respLabel && isRespEvalLine(ln)) {
-          respLabel = normalizeLabelSmart(getValueAfterColon(ln));
-          continue;
-        }
+        if (!id && isIdLine(ln)) { id = parseIdFromLine(ln) || getValueAfterLastColon(ln); continue; }
+        if (!rank && isRankLine(ln)) { rank = getValueAfterLastColon(ln); continue; }
+        if (!evalStrict && isEvalStrictLine(ln)) { evalStrict = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
+        if (!evalFromInteraction && isInteractionLine(ln)) { evalFromInteraction = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
+        if (!respLabel && isRespEvalLine(ln)) { respLabel = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
+        if (!respNone && isRespNoneLine(ln)) { respNone = true; continue; }
       }catch(e){ /* تجاهل */ }
     }
+
     // Fallback للايدي
     if (!id) {
       const m = block.match(/(?:الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|id)\s*[:：]?\s*([\-]?\d+)/i);
-      if (m) {
-        id = m[1];
-        warnings.push(`[${id}] ℹ️ تم استخراج الايدي عبر Fallback (مطابقة عامة داخل الكتلة).`);
-      } else {
+      if (m) { id = m[1]; warnings.push(`[${id}] ℹ️ تم استخراج الايدي عبر Fallback (مطابقة عامة داخل الكتلة).`); }
+      else {
         const n = block.match(/-?\d+/);
-        if (n) {
-          id = n[0];
-          warnings.push(`[${id}] ℹ️ لم يُعثر على مفتاح الايدي، تم استخدام أول رقم في الكتلة كـ ID.`);
-        }
+        if (n) { id = n[0]; warnings.push(`[${id}] ℹ️ لم يُعثر على مفتاح الايدي، تم استخدام أول رقم في الكتلة كـ ID.`); }
       }
     }
-    return { id: stripSpaces(id), rank: stripSpaces(rank), evalLabel: normalizeLabelSmart(evalLabel), respLabel: normalizeLabelSmart(respLabel) };
+
+    // اختيار التقييم النهائي المصدر: نفضّل "التقييم :" على "تفاعل القسم :"
+    const evalLabel = evalStrict || evalFromInteraction || "";
+
+    // إن كان هناك سطر "المسؤوليات : لايوجد" نعتبرها لا مسؤوليات حتى لو لم يُذكر "تقييم المسؤوليات"
+    let respFinal = respLabel;
+    if (respNone && !respFinal) respFinal = "لا يوجد";
+
+    return {
+      id: stripSpaces(id),
+      rank: stripSpaces(rank),
+      evalLabel: normalizeLabelSmart(evalLabel),
+      respLabel: normalizeLabelSmart(respFinal)
+    };
   };
 
   // ===== القواعد (تشمل "جديد") =====
@@ -301,7 +284,7 @@ document.addEventListener("DOMContentLoaded", () => {
     a.href = url; a.download = filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 100);
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 120);
     return url;
   };
 
@@ -314,15 +297,9 @@ document.addEventListener("DOMContentLoaded", () => {
       links.innerHTML = "";
 
       let inputText = "";
-      if (fileInput?.files && fileInput.files[0]) {
-        inputText = await readFileText(fileInput.files[0]);
-      } else {
-        inputText = pasteArea?.value || "";
-      }
-      if (!inputText.trim()){
-        status.innerHTML = '<span class="warn">لم يتم إدخال أي نص.</span>';
-        return;
-      }
+      if (fileInput?.files && fileInput.files[0]) inputText = await readFileText(fileInput.files[0]);
+      else inputText = pasteArea?.value || "";
+      if (!inputText.trim()){ status.innerHTML = '<span class="warn">لم يتم إدخال أي نص.</span>'; return; }
 
       const blocks = splitIntoBlocks(inputText);
       const warnings = [];
@@ -331,13 +308,8 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const block of blocks){
         try{
           const data = parseBlock(block, warnings);
-          if (!data.id) {
-            warnings.push("[?] ⚠️ لم يتم العثور على الايدي داخل هذه الكتلة. تم تجاهلها.");
-            continue;
-          }
-          if (!data.evalLabel) {
-            warnings.push(`[${data.id}] ⚠️ لا يوجد حقل 'التقييم'. تم افتراض 'سيء'.`);
-          }
+          if (!data.id) { warnings.push("[?] ⚠️ لم يتم العثور على الايدي داخل هذه الكتلة. تم تجاهلها."); continue; }
+          if (!data.evalLabel) { warnings.push(`[${data.id}] ⚠️ لا يوجد حقل 'التقييم'. تم افتراض 'سيء'.`); }
           const evalL = data.evalLabel || "سيء";
           const finalLabel = computeFinal(evalL, data.respLabel, warnings, data.id);
           outputs.push(toFinalBlock({id: data.id, rank: data.rank, final: finalLabel}));
