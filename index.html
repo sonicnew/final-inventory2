@@ -113,9 +113,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (compact === "سي" || compact.startsWith("سي")) return "سيء";
     if (compact.startsWith("ممتاز")) return "ممتاز";
     if (compact.startsWith("جديد") || compact === "new") return "جديد";
-    return original; // يُترك للتحذير إن لزم
+    return original;
   };
-  const isNew = (label) => NEW_SET.has(normalizeArabic(label));
 
   const hasNoResp = (resp) => {
     if (!resp) return true;
@@ -131,7 +130,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return "سيء";
   };
 
-  // تحويل رقم 0-10 إلى وسم تقييم عند الحاجة
   const scoreToLabel = (n) => {
     n = Number(n);
     if (!isFinite(n)) return "";
@@ -142,35 +140,52 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ===== التعرف على الأسطر =====
-  const isIdLine = (line) => /(الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|id)/i.test(normalizeArabic(line));
+  const isIdLine = (line) => /(الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|لايدي|id)/i.test(normalizeArabic(line));
   const parseIdFromLine = (line) => { const m = String(line).match(/-?\d+/); return m ? m[0] : ""; };
 
-  const isRankLine = (line) => {
+  // استخراج الرتبة من السطر (مع/بدون نقطتين)
+  const extractRankFromLine = (line) => {
     const n = normalizeArabic(line);
-    return /(?:^|[\s:])(?:ال)?رتبه(?:\س+)?(?:(?:ال)?اداريه)?\s*:/.test(n)
-        || /(?:^|[\s:])(?:ال)?رتبه\s*:/.test(n);
+    if (!/(?:^|\s)(?:ال)?رتب(?:ه|ه)?(?:\s+)?(?:(?:ال)?اداري(?:ه|ه))?/.test(n)) return "";
+    // بعد آخر نقطتين إن وُجدتا في السطر
+    let v = stripSpaces(line.slice(Math.max(line.lastIndexOf(":"), line.lastIndexOf("：")) + 1));
+    v = stripSpaces(v.replace(/^[:：]+\s*/, ""));
+    if (v) return v;
+    // بدون نقطتين: "رتبة ادارية ادفايزر"
+    const m = line.match(/(?:^|\s)(?:ال)?رتب(?:ة|ه)?(?:\s+)?(?:(?:ال)?اداري(?:ة|ه))?(?:\s+)(.+)$/i);
+    return m ? stripSpaces(m[1]) : "";
   };
 
-  // "التقييم :" (أولوية قصوى)
+  // استخراج الرتبة على مستوى الكتلة كاملة (يتوقف قبل أي مفتاح معروف)
+  const extractRankFromBlock = (block) => {
+    const keyPattern = "(?:الايدي|لايدي|التقييم\\s+المسؤوليات|التقييم|تقييم|تقيم|المسؤوليات|رتبه|رتبة|الرتبه|الرتبة|تكتات|باند|الباند|فك|النقاط|القبول|مرفوض|تفاعل|id)";
+    const re = new RegExp(
+      "(?:^|[\\s\\n])(?:ال)?رتب(?:ة|ه)?(?:\\s+)?(?:(?:ال)?اداري(?:ة|ه))?\\s*[:：]?\\s*" +   // المفتاح
+      "(.+?)" +                                                                              // القيمة
+      "(?=(?:\\s+(?:" + keyPattern + ")\\s*[:：])|\\s*$)",                                   // حتى المفتاح التالي أو نهاية
+      "i"
+    );
+    const m = block.match(re);
+    return m ? stripSpaces(m[1]) : "";
+  };
+
+  // "التقييم :" (أولوية قصوى) و "تفاعل القسم :" (Fallback)
   const isEvalStrictLine = (line) => {
     const n = normalizeArabic(line);
     return /(التقييم|تقييم|تقيم)\s*:/.test(n) && !/(مسؤول|مسئول|مسوول)/.test(n);
   };
-  // "تفاعل القسم :" (Fallback إن غاب "التقييم :")
   const isInteractionLine = (line) => /تفاعل القسم\s*:/.test(normalizeArabic(line));
 
-  // تقييم المسؤوليات
+  // تقييم المسؤوليات + "المسؤوليات لايوجد" مع/بدون نقطتين
   const isRespEvalLine = (line) => {
     const n = normalizeArabic(line);
     return /(التقييم|تقييم|تقيم)/.test(n) && /(مسؤول|مسئول|مسوول)/.test(n) && /:/.test(n);
   };
-  // "المسؤوليات لايوجد" مع/بدون نقطتين
   const isRespNoneLine = (line) => {
     const n = normalizeArabic(line);
     return /^المسؤوليات(?:\s*:)?\s*(لايوجد|لا يوجد|بدون|مافي)\s*$/.test(n);
   };
 
-  // قيمة بعد آخر نقطتين
   const getValueAfterLastColon = (line) => {
     const i1 = line.lastIndexOf("：");
     const i2 = line.lastIndexOf(":");
@@ -183,7 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== تقسيم النص =====
   const splitIntoBlocks = (text) => {
     const t = cleanControls(text).replace(/\r\n/g,"\n");
-    let chunks = t.split(/^\s*(?:={6,}|-{3,})\s*$/m).map(s=>s.trim()).filter(Boolean);
+    let chunks = t.split(/^\s*(?:={3,}|-{3,})\s*$/m).map(s=>s.trim()).filter(Boolean);
     if (chunks.length > 1) return chunks;
     const lines = t.split("\n");
     const starts = [];
@@ -208,11 +223,9 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const ln of lines){
       try{
         if (!id && isIdLine(ln)) { id = parseIdFromLine(ln) || getValueAfterLastColon(ln); continue; }
-        if (!rank && isRankLine(ln)) {
-          const rawRank = getValueAfterLastColon(ln);
-          // تنظيف الرتبة من النقطتين المكررة مثل ":Operator" -> "Operator"
-          rank = stripSpaces(rawRank.replace(/^[:：]+\s*/, ""));
-          continue;
+        if (!rank) {
+          const rLine = extractRankFromLine(ln);
+          if (rLine) { rank = rLine; continue; }
         }
         if (!evalStrict && isEvalStrictLine(ln)) { evalStrict = normalizeLabelSmart(getValueAfterLastColon(ln)); continue; }
         if (!evalFromInteractionRaw && isInteractionLine(ln)) { evalFromInteractionRaw = stripSpaces(getValueAfterLastColon(ln)); continue; }
@@ -223,12 +236,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Fallback للايدي
     if (!id) {
-      const m = block.match(/(?:الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|id)\s*[:：]?\s*([\-]?\d+)/i);
+      const m = block.match(/(?:الايدي|الايدى|ايدي|اي\s*دي|الاي\s*دي|لايدي|id)\s*[:：]?\s*([\-]?\d+)/i);
       if (m) { id = m[1]; warnings.push(`[${id}] ℹ️ تم استخراج الايدي عبر Fallback (مطابقة عامة داخل الكتلة).`); }
       else {
         const n = block.match(/-?\d+/);
         if (n) { id = n[0]; warnings.push(`[${id}] ℹ️ لم يُعثر على مفتاح الايدي، تم استخدام أول رقم في الكتلة كـ ID.`); }
       }
+    }
+
+    // Fallback للرتبة على مستوى الكتلة (إذا لم تُلتقط من سطر)
+    if (!rank) {
+      const rBlk = extractRankFromBlock(block);
+      if (rBlk) rank = rBlk;
     }
 
     // Fallback شامل للعثور على "التقييم :" إذا لم يُلتقط كسطر
@@ -241,15 +260,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let evalFromInteraction = "";
     if (!evalStrict && evalFromInteractionRaw) {
       const num = (evalFromInteractionRaw.match(/\d+/)||[])[0];
-      if (num !== undefined) {
-        evalFromInteraction = scoreToLabel(num);
-      } else {
-        // لو لم نجد رقمًا، نحاول تطبيع النص (قد يكون "جيد جدا" مكتوبًا حرفيًا)
-        evalFromInteraction = normalizeLabelSmart(evalFromInteractionRaw);
-      }
+      if (num !== undefined) evalFromInteraction = scoreToLabel(num);
+      else evalFromInteraction = normalizeLabelSmart(evalFromInteractionRaw);
     }
 
-    // إن كان هناك "المسؤوليات : لايوجد" نعتبرها لا مسؤوليات
     let respFinal = respLabel;
     if (respNone && !respFinal) respFinal = "لا يوجد";
 
@@ -286,7 +300,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return pointsToLabel(interP + respP);
   };
 
-  // ===== الإخراج =====
   const toFinalBlock = (rec) =>
     `الايدي : ${rec.id}\n\nالرتبة الادارية : ${rec.rank}\n\nألتقييم : ${rec.final}\n\n-----\n`;
 
