@@ -102,14 +102,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const compact = base.replace(/\s+/g,"");
     const exactMap = {
       "سيء":"سيء","سيئ":"سيء","سئ":"سيء","سي":"سيء",
-      "جيدجدا":"جيد جدا","جيد جدا":"جيد جدا","جيدجدأ":"جيد جدا","جيدجدآ":"جيد جدا","جيدجدًا":"جيد جدا","جيد جدًا":"جيد جدا",
+      "جيدجدا":"جيد جدا","جيد جدا":"جيد جدا","جيدجدأ":"جيد جدا","جيدجدآ":"جيد جدا","جيدجدًا":"جيد جدا","جيد جدًا":"جيد جدا","جيدجاد":"جيد جدا",
       "ممتاز":"ممتاز",
       "ممتازجدا":"ممتاز جدا","ممتاز جدا":"ممتاز جدا","ممتازجدأ":"ممتاز جدا","ممتازجدآ":"ممتاز جدا","ممتازجدًا":"ممتاز جدا","ممتاز جدًا":"ممتاز جدا",
       "جديد":"جديد","جديده":"جديد","new":"جديد"
     };
     if (exactMap[compact]) return exactMap[compact];
     if (compact.startsWith("ممتاز") && (compact.includes("جدا") || compact.includes("جد"))) return "ممتاز جدا";
-    if (compact.startsWith("جيد") && (compact.includes("جدا") || compact.includes("جد"))) return "جيد جدا";
+    if (compact.startsWith("جيد") && (compact.includes("جدا") || compact.includes("جد") || compact.includes("جاد"))) return "جيد جدا";
     if (compact === "سي" || compact.startsWith("سي")) return "سيء";
     if (compact.startsWith("ممتاز")) return "ممتاز";
     if (compact.startsWith("جديد") || compact === "new") return "جديد";
@@ -119,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const hasNoResp = (resp) => {
     if (!resp) return true;
     const t = normalizeArabic(resp);
-    const pats = ["لا يوجد","لا توجد","لايوجد","لاوجود","بدون","ما في","مافي"].map(p => normalizeArabic(p));
+    const pats = ["لا يوجد","لا توجد","لايوجد","لاوجود","بدون","ما في","مافي","لا يمتلك مسؤوليات","لا يمتلك","لا يملك"].map(p => normalizeArabic(p));
     return pats.some(p => t.includes(p));
   };
 
@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // استخراج الرتبة من السطر (مع/بدون نقطتين)
   const extractRankFromLine = (line) => {
     const n = normalizeArabic(line);
-    if (!/(?:^|\s)(?:ال)?رتب(?:ه|ه)?(?:\s+)?(?:(?:ال)?اداري(?:ه|ه))?/.test(n)) return "";
+    if (!/(?:^|\s)(?:ال)?رتب(?:ة|ه)?(?:\s+)?(?:(?:ال)?اداري(?:ة|ه))?/.test(n)) return "";
     // بعد آخر نقطتين إن وُجدتا في السطر
     let v = stripSpaces(line.slice(Math.max(line.lastIndexOf(":"), line.lastIndexOf("：")) + 1));
     v = stripSpaces(v.replace(/^[:：]+\s*/, ""));
@@ -156,16 +156,20 @@ document.addEventListener("DOMContentLoaded", () => {
     return m ? stripSpaces(m[1]) : "";
   };
 
-  // استخراج الرتبة على مستوى الكتلة كاملة (يتوقف قبل أي مفتاح معروف)
+  // استخراج الرتبة على مستوى الكتلة (محاولة بسيطة أولاً ثم متقدمة بالـ lookahead)
   const extractRankFromBlock = (block) => {
+    // 1) بسيطة: حتى نهاية السطر
+    let m = block.match(/(?:^|[\s\n])(?:ال)?رتب(?:ة|ه)?(?:\s+)?(?:(?:ال)?اداري(?:ة|ه))?\s*[:：]?\s*([^\n\r]+)/i);
+    if (m) return stripSpaces(m[1]);
+    // 2) متقدمة: حتى المفتاح التالي المعروف
     const keyPattern = "(?:الايدي|لايدي|التقييم\\s+المسؤوليات|التقييم|تقييم|تقيم|المسؤوليات|رتبه|رتبة|الرتبه|الرتبة|تكتات|باند|الباند|فك|النقاط|القبول|مرفوض|تفاعل|id)";
     const re = new RegExp(
-      "(?:^|[\\s\\n])(?:ال)?رتب(?:ة|ه)?(?:\\s+)?(?:(?:ال)?اداري(?:ة|ه))?\\s*[:：]?\\s*" +   // المفتاح
-      "(.+?)" +                                                                              // القيمة
-      "(?=(?:\\s+(?:" + keyPattern + ")\\s*[:：])|\\s*$)",                                   // حتى المفتاح التالي أو نهاية
+      "(?:^|[\\s\\n])(?:ال)?رتب(?:ة|ه)?(?:\\s+)?(?:(?:ال)?اداري(?:ة|ه))?\\s*[:：]?\\s*" +
+      "(.+?)" +
+      "(?=(?:\\s+(?:" + keyPattern + ")\\s*[:：])|\\s*$)",
       "i"
     );
-    const m = block.match(re);
+    m = block.match(re);
     return m ? stripSpaces(m[1]) : "";
   };
 
@@ -183,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   const isRespNoneLine = (line) => {
     const n = normalizeArabic(line);
-    return /^المسؤوليات(?:\s*:)?\s*(لايوجد|لا يوجد|بدون|مافي)\s*$/.test(n);
+    return /^المسؤوليات(?:\s*:)?\s*(لايوجد|لا يوجد|بدون|مافي|لا يمتلك مسؤوليات|لا يمتلك|لا يملك)\s*$/.test(n);
   };
 
   const getValueAfterLastColon = (line) => {
@@ -248,6 +252,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!rank) {
       const rBlk = extractRankFromBlock(block);
       if (rBlk) rank = rBlk;
+      else warnings.push(`[${id||"?"}] ⚠️ لم يتم العثور على "الرتبة الادارية" في هذه الكتلة.`);
     }
 
     // Fallback شامل للعثور على "التقييم :" إذا لم يُلتقط كسطر
@@ -353,6 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const data = parseBlock(block, warnings);
           if (!data.id) { warnings.push("[?] ⚠️ لم يتم العثور على الايدي داخل هذه الكتلة. تم تجاهلها."); continue; }
           if (!data.evalLabel) { warnings.push(`[${data.id}] ⚠️ لا يوجد حقل 'التقييم'. تم افتراض 'سيء'.`); }
+          if (!data.rank) { warnings.push(`[${data.id}] ⚠️ لا توجد 'الرتبة الادارية'.`); }
           const evalL = data.evalLabel || "سيء";
           const finalLabel = computeFinal(evalL, data.respLabel, warnings, data.id);
           outputs.push(toFinalBlock({id: data.id, rank: data.rank, final: finalLabel}));
